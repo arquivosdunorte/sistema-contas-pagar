@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GestorPag · Controle de Contas a Pagar</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div class="login-overlay" id="loginOverlay"></div>
+
+<div class="app">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">GP</span>
+      <span class="brand-name">GestorPag</span>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-view="dashboard">📊 <span>Dashboard</span></button>
+      <button class="nav-item" data-view="contas">🧾 <span>Contas a Pagar</span></button>
+      <button class="nav-item" data-view="beneficiarios">👤 <span>Beneficiários</span></button>
+      <button class="nav-item" data-view="pagadores">🏦 <span>Pagadores</span></button>
+      <button class="nav-item" data-view="relatorios">📈 <span>Relatórios</span></button>
+      <button class="nav-item" data-view="cadastrosAux">⚙️ <span>Cadastros Auxiliares</span></button>
+      <button class="nav-item" data-view="historico">🕘 <span>Histórico</span></button>
+      <button class="nav-item" data-view="usuarios">🔐 <span>Usuários</span></button>
+      <button class="nav-item" data-view="backup">💾 <span>Backup</span></button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span id="userTag">admin · Administrador</span>
+      <button id="btnLogout" title="Encerrar sessão">⏻ Sair</button>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <main class="main">
+
+    <header class="topbar">
+      <input type="text" id="globalSearch" placeholder="🔍 Pesquisar por nome, CNPJ/CPF, nº conta ou valor...">
+      <div class="topbar-actions">
+        <span id="clock"></span>
+      </div>
+    </header>
+
+    <!-- ---------- DASHBOARD ---------- -->
+    <section id="view-dashboard" class="view active">
+      <div class="view-header">
+        <h1>Dashboard</h1>
+        <div class="quick-filters" id="dashFiltros">
+          <button data-f="hoje">Hoje</button>
+          <button data-f="semana">Semana</button>
+          <button data-f="mes" class="sel">Mês</button>
+          <button data-f="ano">Ano</button>
+          <button data-f="todos">Tudo</button>
+        </div>
+      </div>
+
+      <div class="cards-grid">
+        <div class="kpi-card kpi-blue"><span class="kpi-label">Total a Pagar</span><span class="kpi-value" id="kpiTotal">R$ 0,00</span></div>
+        <div class="kpi-card kpi-red"><span class="kpi-label">Vencidas</span><span class="kpi-value" id="kpiVencidas">0</span></div>
+        <div class="kpi-card kpi-orange"><span class="kpi-label">Vencendo Hoje</span><span class="kpi-value" id="kpiHoje">0</span></div>
+        <div class="kpi-card kpi-yellow"><span class="kpi-label">Próx. 7 dias</span><span class="kpi-value" id="kpiProx">0</span></div>
+        <div class="kpi-card kpi-green"><span class="kpi-label">Total Pago</span><span class="kpi-value" id="kpiPago">R$ 0,00</span></div>
+        <div class="kpi-card kpi-gray"><span class="kpi-label">Total Pendente</span><span class="kpi-value" id="kpiPendente">R$ 0,00</span></div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-box"><h3>Evolução das Despesas</h3><canvas id="chartEvolucao"></canvas></div>
+        <div class="chart-box"><h3>Por Centro de Custo</h3><canvas id="chartCentro"></canvas></div>
+        <div class="chart-box"><h3>Por Beneficiário</h3><canvas id="chartBenef"></canvas></div>
+        <div class="chart-box"><h3>Por Tipo de Conta</h3><canvas id="chartTipo"></canvas></div>
+      </div>
+
+      <div class="table-box">
+        <h3>Alertas</h3>
+        <table class="dense-table" id="tabelaAlertas"><thead>
+          <tr><th>Tipo</th><th>Conta</th><th>Beneficiário</th><th>Vencimento</th><th>Valor</th></tr>
+        </thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- ---------- CONTAS A PAGAR ---------- -->
+    <section id="view-contas" class="view">
+      <div class="view-header">
+        <h1>Contas a Pagar</h1>
+        <button class="btn-primary" id="btnNovaConta">+ Nova Conta</button>
+      </div>
+
+      <div class="filters-bar">
+        <select id="fStatus"><option value="">Status (todos)</option><option>Aberta</option><option>Agendada</option><option>Paga</option><option>Vencida</option><option>Cancelada</option></select>
+        <select id="fTipoConta"><option value="">Tipo de Conta</option></select>
+        <select id="fCentro"><option value="">Centro de Custo</option></select>
+        <input type="date" id="fDe"> <input type="date" id="fAte">
+        <button id="btnFiltrarContas">Filtrar</button>
+        <button id="btnLimparContas">Limpar</button>
+      </div>
+
+      <div class="table-box">
+        <table class="dense-table" id="tabelaContas">
+          <thead><tr>
+            <th>Nº</th><th>Beneficiário</th><th>Pagador</th><th>Tipo</th><th>C.Custo</th>
+            <th>Vencimento</th><th>Valor</th><th>Status</th><th>Pagto</th><th>Ações</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ---------- BENEFICIÁRIOS ---------- -->
+    <section id="view-beneficiarios" class="view">
+      <div class="view-header">
+        <h1>Beneficiários</h1>
+        <button class="btn-primary" id="btnNovoBenef">+ Novo Beneficiário</button>
+      </div>
+      <div class="table-box">
+        <table class="dense-table" id="tabelaBenef">
+          <thead><tr><th>Nome/Razão Social</th><th>Tipo</th><th>CPF/CNPJ</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ---------- PAGADORES ---------- -->
+    <section id="view-pagadores" class="view">
+      <div class="view-header">
+        <h1>Pagadores</h1>
+        <button class="btn-primary" id="btnNovoPagador">+ Novo Pagador</button>
+      </div>
+      <div class="table-box">
+        <table class="dense-table" id="tabelaPagadores">
+          <thead><tr><th>Empresa</th><th>CNPJ</th><th>Responsável</th><th>Banco</th><th>Ações</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ---------- RELATÓRIOS ---------- -->
+    <section id="view-relatorios" class="view">
+      <div class="view-header"><h1>Relatórios</h1></div>
+
+      <div class="filters-bar">
+        <select id="repTipo">
+          <option value="abertas">Contas Abertas</option>
+          <option value="pagas">Contas Pagas</option>
+          <option value="vencidas">Contas Vencidas</option>
+          <option value="fluxo">Fluxo Financeiro</option>
+          <option value="categoria">Despesas por Categoria</option>
+          <option value="empresa">Despesas por Empresa</option>
+          <option value="ranking">Ranking de Maiores Despesas</option>
+        </select>
+        <input type="date" id="repDe"> <input type="date" id="repAte">
+        <select id="repBenef"><option value="">Beneficiário (todos)</option></select>
+        <select id="repCentro"><option value="">Centro de Custo (todos)</option></select>
+        <button id="btnGerarRelatorio">Gerar</button>
+        <button id="btnExportCSV">Exportar Excel (CSV)</button>
+        <button id="btnExportPDF">Exportar / Imprimir PDF</button>
+      </div>
+
+      <div class="table-box" id="relatorioResultado">
+        <p class="empty-msg">Selecione os filtros e clique em "Gerar".</p>
+      </div>
+    </section>
+
+    <!-- ---------- CADASTROS AUXILIARES ---------- -->
+    <section id="view-cadastrosAux" class="view">
+      <div class="view-header"><h1>Cadastros Auxiliares</h1></div>
+      <div class="aux-grid">
+        <div class="aux-box">
+          <h3>Tipos de Conta</h3>
+          <div class="aux-add"><input id="novoTipoConta" placeholder="Novo tipo de conta"><button data-aux="tiposConta">Adicionar</button></div>
+          <ul id="listaTiposConta" class="aux-list"></ul>
+        </div>
+        <div class="aux-box">
+          <h3>Centros de Custo</h3>
+          <div class="aux-add"><input id="novoCentro" placeholder="Novo centro de custo"><button data-aux="centrosCusto">Adicionar</button></div>
+          <ul id="listaCentros" class="aux-list"></ul>
+        </div>
+        <div class="aux-box">
+          <h3>Tipos de Custo</h3>
+          <div class="aux-add"><input id="novoTipoCusto" placeholder="Novo tipo de custo"><button data-aux="tiposCusto">Adicionar</button></div>
+          <ul id="listaTiposCusto" class="aux-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- HISTÓRICO ---------- -->
+    <section id="view-historico" class="view">
+      <div class="view-header"><h1>Histórico / Auditoria</h1></div>
+      <div class="table-box">
+        <table class="dense-table" id="tabelaHistorico">
+          <thead><tr><th>Data</th><th>Ação</th><th>Entidade</th><th>Descrição</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ---------- USUÁRIOS ---------- -->
+    <section id="view-usuarios" class="view">
+      <div class="view-header">
+        <h1>Usuários</h1>
+        <button class="btn-primary" id="btnNovoUsuario">+ Novo Usuário</button>
+      </div>
+      <div class="table-box">
+        <table class="dense-table" id="tabelaUsuarios">
+          <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Ações</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ---------- BACKUP ---------- -->
+    <section id="view-backup" class="view">
+      <div class="view-header"><h1>Backup e Restauração</h1></div>
+      <div class="table-box">
+        <p>Exporte todos os dados do sistema em um arquivo JSON ou importe um backup existente.</p>
+        <button class="btn-primary" id="btnExportBackup">⬇ Exportar Backup Agora</button>
+        <label class="btn-secondary" for="inputImportBackup">⬆ Importar Backup</label>
+        <input type="file" id="inputImportBackup" accept=".json" hidden>
+        <hr>
+        <button class="btn-danger" id="btnClearAll">🗑 Limpar Todos os Dados</button>
+      </div>
+
+      <div class="table-box">
+        <h3>Backup Automático</h3>
+        <p style="font-size:12px;color:var(--text-dim);margin-top:0;">
+          Escolha a pasta onde os backups serão salvos automaticamente e o intervalo de tempo.
+          O sistema também tentará salvar um backup ao encerrar (fechar/sair do sistema).
+          Disponível em navegadores Chrome/Edge (Firefox fará o download do arquivo normalmente).
+        </p>
+        <div class="filters-bar">
+          <button class="btn-secondary" id="btnEscolherPasta">📁 Escolher Pasta de Backup</button>
+          <select id="backupIntervalo">
+            <option value="0">Backup automático desligado</option>
+            <option value="5">A cada 5 minutos</option>
+            <option value="15">A cada 15 minutos</option>
+            <option value="30">A cada 30 minutos</option>
+            <option value="60">A cada 1 hora</option>
+          </select>
+        </div>
+        <p id="pastaBackupAtual" style="font-size:12px;color:var(--text-dim);">Nenhuma pasta selecionada nesta sessão (será solicitado download direto).</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===================== MODAL GENÉRICO ===================== -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box" id="modalBox">
+    <div class="modal-header">
+      <h2 id="modalTitle">Título</h2>
+      <button id="modalClose">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="js/database.js"></script>
+<script src="js/relatorios.js"></script>
+<script src="js/app.js"></script>
+<script src="js/auth.js"></script>
+</body>
+</html>
