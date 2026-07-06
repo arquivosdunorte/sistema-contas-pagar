@@ -148,17 +148,25 @@
 
       <div class="filters-bar">
         <select id="repTipo">
+          <option value="todas">Todas as Contas (com Status)</option>
           <option value="abertas">Contas Abertas</option>
           <option value="pagas">Contas Pagas</option>
           <option value="vencidas">Contas Vencidas</option>
           <option value="fluxo">Fluxo Financeiro</option>
-          <option value="categoria">Despesas por Categoria</option>
+          <option value="categoria">Despesas por Categoria (Tipo de Conta)</option>
+          <option value="tipoCusto">Despesas por Tipo de Custo</option>
           <option value="empresa">Despesas por Empresa</option>
           <option value="ranking">Ranking de Maiores Despesas</option>
         </select>
         <input type="date" id="repDe"> <input type="date" id="repAte">
         <select id="repBenef"><option value="">Beneficiário (todos)</option></select>
         <select id="repCentro"><option value="">Centro de Custo (todos)</option></select>
+        <select id="repTipoConta"><option value="">Tipo de Conta (todos)</option></select>
+        <select id="repTipoCusto"><option value="">Tipo de Custo (todos)</option></select>
+        <select id="repStatus">
+          <option value="">Status (todos)</option>
+          <option>Aberta</option><option>Agendada</option><option>Paga</option><option>Vencida</option><option>Cancelada</option>
+        </select>
         <button id="btnGerarRelatorio">Gerar</button>
         <button id="btnExportCSV">Exportar Excel (CSV)</button>
         <button id="btnExportPDF">Exportar / Imprimir PDF</button>

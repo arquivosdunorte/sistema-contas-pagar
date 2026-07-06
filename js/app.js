@@ -236,7 +236,7 @@ const App = {
         <div class="form-field"><label>Centro de Custo</label><select id="cCentro"><option value="">Selecione</option>${opt(centros, 'centroCustoId', c => c.nome)}</select></div>
         <div class="form-field"><label>Tipo de Custo</label><select id="cTipoCusto"><option value="">Selecione</option>${opt(tiposCusto, 'tipoCustoId', t => t.nome)}</select></div>
         <div class="form-field"><label>Forma de Pagamento</label>
-          <select id="cForma">${['PIX', 'TED', 'DOC', 'Boleto', 'Cartão', 'Dinheiro', 'Cheque', 'Outros'].map(f => `<option ${conta?.formaPagamento === f ? 'selected' : ''}>${f}</option>`).join('')}</select>
+          <select id="cForma">${['PIX', 'TED', 'DOC', 'Boleto', 'Cartão', 'Dinheiro', 'Cheque', 'Débito em Conta', 'Outros'].map(f => `<option ${conta?.formaPagamento === f ? 'selected' : ''}>${f}</option>`).join('')}</select>
         </div>
         <div class="form-field"><label>Valor (R$)</label><input id="cValor" type="number" step="0.01" value="${conta?.valor || ''}"></div>
         <div class="form-field"><label>Data de Emissão</label><input id="cEmissao" type="date" value="${conta?.emissao || ''}"></div>
@@ -499,8 +499,14 @@ const App = {
       <div class="form-grid" style="margin-top:10px;">
         <div class="form-field"><label>Razão Social / Nome Completo</label><input id="bNome" value="${b?.razaoSocial || b?.nomeCompleto || ''}"></div>
         <div class="form-field"><label>Nome Fantasia</label><input id="bFantasia" value="${b?.nomeFantasia || ''}"></div>
-        <div class="form-field"><label>CNPJ / CPF</label><input id="bDoc" value="${b?.cnpj || b?.cpf || ''}"></div>
-        <div class="form-field"><label>IE / RG</label><input id="bIe" value="${b?.ie || b?.rg || ''}"></div>
+        <div class="form-field">
+          <label id="bDocLabel">${(!b || b.tipo === 'PJ') ? 'CNPJ' : 'CPF'}</label>
+          <input id="bDoc" value="${b?.cnpj || b?.cpf || ''}" placeholder="${(!b || b.tipo === 'PJ') ? '00.000.000/0000-00' : '000.000.000-00'}" maxlength="18">
+        </div>
+        <div class="form-field">
+          <label id="bIeLabel">${(!b || b.tipo === 'PJ') ? 'Inscrição Estadual' : 'RG'}</label>
+          <input id="bIe" value="${b?.ie || b?.rg || ''}">
+        </div>
         <div class="form-field full"><label>Endereço</label><input id="bEndereco" value="${b?.endereco || ''}"></div>
         <div class="form-field"><label>Telefone</label><input id="bTelefone" value="${b?.telefone || ''}"></div>
         <div class="form-field"><label>E-mail</label><input id="bEmail" value="${b?.email || ''}"></div>
@@ -516,36 +522,97 @@ const App = {
       </div>
     `);
 
+    // ---- máscara e label dinâmicos de CPF/CNPJ ----
+    const docInput = document.getElementById('bDoc');
+    const docLabel = document.getElementById('bDocLabel');
+    const ieLabel  = document.getElementById('bIeLabel');
+    const tipoSel  = document.getElementById('bTipo');
+
+    const atualizarLabel = (tipo) => {
+      if (tipo === 'PJ') {
+        docLabel.textContent = 'CNPJ';
+        ieLabel.textContent  = 'Inscrição Estadual';
+        docInput.placeholder = '00.000.000/0000-00';
+        docInput.maxLength   = 18;
+      } else {
+        docLabel.textContent = 'CPF';
+        ieLabel.textContent  = 'RG';
+        docInput.placeholder = '000.000.000-00';
+        docInput.maxLength   = 14;
+      }
+      docInput.value = this.mascararDoc(docInput.value.replace(/\D/g, ''), tipo);
+    };
+
+    tipoSel.addEventListener('change', () => {
+      docInput.value = '';
+      atualizarLabel(tipoSel.value);
+    });
+
+    docInput.addEventListener('input', () => {
+      const tipo = tipoSel.value;
+      const apenasNum = docInput.value.replace(/\D/g, '');
+      const cursor = docInput.selectionStart;
+      docInput.value = this.mascararDoc(apenasNum, tipo);
+      // reposicionar cursor aproximadamente após a máscara
+      try { docInput.setSelectionRange(cursor + 1, cursor + 1); } catch(_) {}
+    });
+
     document.getElementById('bCancelar').addEventListener('click', () => this.closeModal());
     document.getElementById('bSalvar').addEventListener('click', () => {
-      const tipo = document.getElementById('bTipo').value;
+      const tipo = tipoSel.value;
       const nome = document.getElementById('bNome').value;
-      const doc = document.getElementById('bDoc').value;
+      const doc  = docInput.value;
       if (!nome) { this.toast('Informe o nome/razão social.'); return; }
+
+      // validação básica de tamanho
+      const nums = doc.replace(/\D/g, '');
+      if (doc && tipo === 'PJ' && nums.length !== 14) { this.toast('CNPJ deve ter 14 dígitos.'); return; }
+      if (doc && tipo === 'PF' && nums.length !== 11) { this.toast('CPF deve ter 11 dígitos.'); return; }
+
       const dados = {
         tipo,
-        razaoSocial: tipo === 'PJ' ? nome : undefined,
+        razaoSocial:  tipo === 'PJ' ? nome : undefined,
         nomeCompleto: tipo === 'PF' ? nome : undefined,
         nomeFantasia: document.getElementById('bFantasia').value,
         cnpj: tipo === 'PJ' ? doc : undefined,
-        cpf: tipo === 'PF' ? doc : undefined,
-        ie: tipo === 'PJ' ? document.getElementById('bIe').value : undefined,
-        rg: tipo === 'PF' ? document.getElementById('bIe').value : undefined,
-        endereco: document.getElementById('bEndereco').value,
-        telefone: document.getElementById('bTelefone').value,
-        email: document.getElementById('bEmail').value,
-        banco: document.getElementById('bBanco').value,
-        agencia: document.getElementById('bAgencia').value,
-        conta: document.getElementById('bConta').value,
-        pix: document.getElementById('bPix').value,
-        observacoes: document.getElementById('bObs').value
+        cpf:  tipo === 'PF' ? doc : undefined,
+        ie:   tipo === 'PJ' ? document.getElementById('bIe').value : undefined,
+        rg:   tipo === 'PF' ? document.getElementById('bIe').value : undefined,
+        endereco:     document.getElementById('bEndereco').value,
+        telefone:     document.getElementById('bTelefone').value,
+        email:        document.getElementById('bEmail').value,
+        banco:        document.getElementById('bBanco').value,
+        agencia:      document.getElementById('bAgencia').value,
+        conta:        document.getElementById('bConta').value,
+        pix:          document.getElementById('bPix').value,
+        observacoes:  document.getElementById('bObs').value
       };
       if (b) { DB.update('beneficiarios', b.id, dados); DB.log('Alteração', 'beneficiario', `${nome} atualizado.`); }
-      else { DB.insert('beneficiarios', dados); DB.log('Inclusão', 'beneficiario', `${nome} cadastrado.`); }
+      else   { DB.insert('beneficiarios', dados);        DB.log('Inclusão',  'beneficiario', `${nome} cadastrado.`); }
       this.closeModal();
       this.renderTudo();
       this.toast('Beneficiário salvo.');
     });
+  },
+
+  /* retorna string formatada conforme tipo: CNPJ ou CPF */
+  mascararDoc(nums, tipo) {
+    if (tipo === 'PJ') {
+      // CNPJ: 00.000.000/0000-00
+      nums = nums.slice(0, 14);
+      if (nums.length <= 2)  return nums;
+      if (nums.length <= 5)  return nums.slice(0,2) + '.' + nums.slice(2);
+      if (nums.length <= 8)  return nums.slice(0,2) + '.' + nums.slice(2,5) + '.' + nums.slice(5);
+      if (nums.length <= 12) return nums.slice(0,2) + '.' + nums.slice(2,5) + '.' + nums.slice(5,8) + '/' + nums.slice(8);
+      return nums.slice(0,2) + '.' + nums.slice(2,5) + '.' + nums.slice(5,8) + '/' + nums.slice(8,12) + '-' + nums.slice(12);
+    } else {
+      // CPF: 000.000.000-00
+      nums = nums.slice(0, 11);
+      if (nums.length <= 3)  return nums;
+      if (nums.length <= 6)  return nums.slice(0,3) + '.' + nums.slice(3);
+      if (nums.length <= 9)  return nums.slice(0,3) + '.' + nums.slice(3,6) + '.' + nums.slice(6);
+      return nums.slice(0,3) + '.' + nums.slice(3,6) + '.' + nums.slice(6,9) + '-' + nums.slice(9);
+    }
   },
 
   renderBeneficiarios(lista = null) {
@@ -585,7 +652,7 @@ const App = {
     this.openModal(p ? 'Editar Pagador' : 'Novo Pagador', `
       <div class="form-grid">
         <div class="form-field"><label>Nome da Empresa</label><input id="pNome" value="${p?.nomeEmpresa || ''}"></div>
-        <div class="form-field"><label>CNPJ</label><input id="pCnpj" value="${p?.cnpj || ''}"></div>
+        <div class="form-field"><label>CNPJ</label><input id="pCnpj" value="${p?.cnpj || ''}" placeholder="00.000.000/0000-00" maxlength="18"></div>
         <div class="form-field full"><label>Endereço</label><input id="pEndereco" value="${p?.endereco || ''}"></div>
         <div class="form-field"><label>Responsável</label><input id="pResp" value="${p?.responsavel || ''}"></div>
         <div class="form-field"><label>Telefone</label><input id="pTel" value="${p?.telefone || ''}"></div>
@@ -597,12 +664,23 @@ const App = {
         <button class="btn-primary" id="pSalvar">Salvar</button>
       </div>
     `);
+
+    // máscara CNPJ
+    const cnpjInput = document.getElementById('pCnpj');
+    cnpjInput.addEventListener('input', () => {
+      const nums = cnpjInput.value.replace(/\D/g, '');
+      cnpjInput.value = this.mascararDoc(nums, 'PJ');
+    });
+
     document.getElementById('pCancelar').addEventListener('click', () => this.closeModal());
     document.getElementById('pSalvar').addEventListener('click', () => {
       const nomeEmpresa = document.getElementById('pNome').value;
       if (!nomeEmpresa) { this.toast('Informe o nome da empresa.'); return; }
+      const cnpj = cnpjInput.value;
+      const nums = cnpj.replace(/\D/g, '');
+      if (cnpj && nums.length !== 14) { this.toast('CNPJ deve ter 14 dígitos.'); return; }
       const dados = {
-        nomeEmpresa, cnpj: document.getElementById('pCnpj').value,
+        nomeEmpresa, cnpj,
         endereco: document.getElementById('pEndereco').value,
         responsavel: document.getElementById('pResp').value,
         telefone: document.getElementById('pTel').value,
@@ -610,7 +688,7 @@ const App = {
         contaBancaria: document.getElementById('pConta').value
       };
       if (p) { DB.update('pagadores', p.id, dados); DB.log('Alteração', 'pagador', `${nomeEmpresa} atualizado.`); }
-      else { DB.insert('pagadores', dados); DB.log('Inclusão', 'pagador', `${nomeEmpresa} cadastrado.`); }
+      else   { DB.insert('pagadores', dados);        DB.log('Inclusão',  'pagador', `${nomeEmpresa} cadastrado.`); }
       this.closeModal();
       this.renderTudo();
       this.toast('Pagador salvo.');
@@ -658,7 +736,10 @@ const App = {
       de: document.getElementById('repDe').value,
       ate: document.getElementById('repAte').value,
       beneficiarioId: document.getElementById('repBenef').value,
-      centroCustoId: document.getElementById('repCentro').value
+      centroCustoId: document.getElementById('repCentro').value,
+      tipoContaId: document.getElementById('repTipoConta').value,
+      tipoCustoId: document.getElementById('repTipoCusto').value,
+      status: document.getElementById('repStatus').value
     };
     const dados = Relatorios.gerar(tipo, filtros);
     this._ultimoRelatorio = { tipo, dados };
@@ -703,6 +784,7 @@ const App = {
   popularSelects() {
     const tipos = DB.getAll('tiposConta');
     const centros = DB.getAll('centrosCusto');
+    const tiposCusto = DB.getAll('tiposCusto');
     const benefs = DB.getAll('beneficiarios');
 
     const fillSelect = (id, items, labelFn, keepFirst = true) => {
@@ -718,6 +800,8 @@ const App = {
     fillSelect('fCentro', centros, c => c.nome);
     fillSelect('repBenef', benefs, b => b.tipo === 'PJ' ? b.razaoSocial : b.nomeCompleto);
     fillSelect('repCentro', centros, c => c.nome);
+    fillSelect('repTipoConta', tipos, t => t.nome);
+    fillSelect('repTipoCusto', tiposCusto, t => t.nome);
   },
 
   /* =========================================================
