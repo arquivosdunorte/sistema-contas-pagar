@@ -252,6 +252,44 @@ const App = {
           <button type="button" class="btn-secondary" id="cVerBarcode" ${conta?.codigoBarras ? '' : 'style="display:none;"'}>🏷️ Ver código de barras</button>
         </div>
 
+        ${!conta ? `
+        <div class="form-field full" style="background:#eef4ff;border:1px solid #b6cff5;border-radius:6px;padding:12px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <input type="checkbox" id="cUsarParcelamento" style="width:16px;height:16px;">
+            <label for="cUsarParcelamento" style="font-weight:700;font-size:12.5px;color:var(--text);cursor:pointer;">
+              📋 Parcelar / Duplicar lançamento em várias parcelas
+            </label>
+          </div>
+          <div id="blocoParcelamento" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+              <div class="form-field">
+                <label>Número de parcelas</label>
+                <input id="cNumParcelas" type="number" min="2" max="120" value="2" placeholder="2 a 120">
+              </div>
+              <div class="form-field">
+                <label>Intervalo entre parcelas</label>
+                <select id="cIntervalo">
+                  <option value="mensal">Mensal (30 dias)</option>
+                  <option value="quinzenal">Quinzenal (15 dias)</option>
+                  <option value="semanal">Semanal (7 dias)</option>
+                  <option value="bimestral">Bimestral (60 dias)</option>
+                  <option value="trimestral">Trimestral (90 dias)</option>
+                  <option value="semestral">Semestral (180 dias)</option>
+                  <option value="anual">Anual (365 dias)</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Valor total ou por parcela?</label>
+                <select id="cTipoValor">
+                  <option value="porParcela">Valor informado = valor por parcela</option>
+                  <option value="total">Valor informado = valor total (dividir)</option>
+                </select>
+              </div>
+            </div>
+            <div id="previewParcelas" style="margin-top:10px;font-size:11.5px;color:var(--text-dim);"></div>
+          </div>
+        </div>` : ''}
+
         <div class="form-field full">
           <label>Anexar comprovante (PDF ou imagem JPEG)</label>
           <input id="cAnexo" type="file" accept="application/pdf,image/jpeg,image/jpg">
@@ -287,6 +325,45 @@ const App = {
     }
 
     let anexoRemovido = false;
+
+    // ---- parcelamento (apenas em nova conta) ----
+    const chkParcelar = document.getElementById('cUsarParcelamento');
+    if (chkParcelar) {
+      const blocoParc = document.getElementById('blocoParcelamento');
+      const previewEl = document.getElementById('previewParcelas');
+      const atualizarBotao = () => {
+        document.getElementById('cSalvar').textContent =
+          chkParcelar.checked ? `Lançar parcelas` : 'Salvar';
+      };
+
+      const atualizarPreview = () => {
+        if (!chkParcelar.checked) return;
+        const qtd    = parseInt(document.getElementById('cNumParcelas').value) || 0;
+        const tipo   = document.getElementById('cTipoValor').value;
+        const valor  = parseFloat(document.getElementById('cValor').value) || 0;
+        const venc   = document.getElementById('cVencimento').value;
+        if (!qtd || !valor || !venc || qtd < 2 || qtd > 120) {
+          previewEl.textContent = 'Preencha valor, vencimento e parcelas (2–120) para ver o preview.';
+          return;
+        }
+        const valorParcela = tipo === 'total' ? valor / qtd : valor;
+        const datas        = this.calcularDatasParc(venc, qtd, document.getElementById('cIntervalo').value);
+        previewEl.innerHTML = `<b>${qtd} parcelas</b> de <b>${this.formatMoney(valorParcela)}</b> cada
+          — Total: <b>${this.formatMoney(valorParcela * qtd)}</b><br>
+          <span>1ª: ${this.formatDate(datas[0])} &nbsp;|&nbsp; Última: ${this.formatDate(datas[datas.length-1])}</span>`;
+      };
+
+      chkParcelar.addEventListener('change', () => {
+        blocoParc.style.display = chkParcelar.checked ? '' : 'none';
+        atualizarBotao();
+        atualizarPreview();
+      });
+      ['cNumParcelas','cIntervalo','cTipoValor'].forEach(id =>
+        document.getElementById(id)?.addEventListener('input', atualizarPreview)
+      );
+      document.getElementById('cValor').addEventListener('input', atualizarPreview);
+      document.getElementById('cVencimento').addEventListener('change', atualizarPreview);
+    }
 
     document.getElementById('cBarcode').addEventListener('input', e => {
       document.getElementById('cVerBarcode').style.display = e.target.value ? '' : 'none';
@@ -370,16 +447,95 @@ const App = {
       }
 
       if (conta) {
+        // edição normal de uma conta existente
         DB.update('contas', conta.id, dados);
         DB.log('Alteração', 'conta', `Conta nº ${dados.numero || conta.id} atualizada.`);
+        this.closeModal();
+        this.renderTudo();
+        this.toast('Conta salva com sucesso.');
       } else {
-        const nova = DB.insert('contas', dados);
-        DB.log('Inclusão', 'conta', `Conta nº ${dados.numero || nova.id} cadastrada.`);
+        // ---- verifica se vai parcelar ----
+        const usarParc = document.getElementById('cUsarParcelamento')?.checked;
+        if (usarParc) {
+          const qtd          = parseInt(document.getElementById('cNumParcelas').value) || 0;
+          const intervalo    = document.getElementById('cIntervalo').value;
+          const tipoValor    = document.getElementById('cTipoValor').value;
+          const valorBruto   = dados.valor;
+          const numeroBase   = dados.numero ? dados.numero.replace(/\/\d+$/, '') : '';
+
+          if (qtd < 2 || qtd > 120) { this.toast('Informe de 2 a 120 parcelas.'); return; }
+
+          const valorParcela = tipoValor === 'total'
+            ? Math.round((valorBruto / qtd) * 100) / 100
+            : valorBruto;
+
+          const datas = this.calcularDatasParc(dados.vencimento, qtd, intervalo);
+
+          let criadas = 0;
+          datas.forEach((dataVenc, i) => {
+            const numParcela = String(i + 1).padStart(2, '0');
+            const parcela = {
+              ...dados,
+              valor:         valorParcela,
+              vencimento:    dataVenc,
+              pagamento:     '',
+              validado:      false,
+              validadoEm:    null,
+              validadoPor:   null,
+              numero:        numeroBase ? `${numeroBase}/${numParcela}` : '',
+              parcela:       i + 1,
+              totalParcelas: qtd,
+              descricao:     dados.descricao
+                ? `${dados.descricao} (${numParcela}/${qtd})`
+                : `Parcela ${numParcela}/${qtd}`,
+            };
+            parcela.status = DB.calcularStatus(parcela, this.todayISO());
+            DB.insert('contas', parcela);
+            criadas++;
+          });
+
+          DB.log('Inclusão', 'conta', `${criadas} parcelas lançadas — ${dados.descricao || 'sem descrição'}`);
+          this.closeModal();
+          this.renderTudo();
+          this.toast(`${criadas} parcelas lançadas com sucesso! 🎉`);
+        } else {
+          // lançamento único normal
+          const nova = DB.insert('contas', dados);
+          DB.log('Inclusão', 'conta', `Conta nº ${dados.numero || nova.id} cadastrada.`);
+          this.closeModal();
+          this.renderTudo();
+          this.toast('Conta salva com sucesso.');
+        }
       }
-      this.closeModal();
-      this.renderTudo();
-      this.toast('Conta salva com sucesso.');
     });
+  },
+
+  /* Gera array de datas ISO a partir de uma data inicial, qtd de parcelas e intervalo */
+  calcularDatasParc(dataInicial, qtd, intervalo) {
+    const diasPorIntervalo = {
+      semanal:     7,
+      quinzenal:   15,
+      mensal:      30,
+      bimestral:   60,
+      trimestral:  90,
+      semestral:   180,
+      anual:       365
+    };
+    const dias = diasPorIntervalo[intervalo] || 30;
+    const datas = [];
+    for (let i = 0; i < qtd; i++) {
+      const d = new Date(dataInicial + 'T12:00:00');
+      if (intervalo === 'mensal' || intervalo === 'bimestral' || intervalo === 'trimestral' ||
+          intervalo === 'semestral' || intervalo === 'anual') {
+        // para intervalos em meses, avança meses exatos para evitar drift
+        const mesesAvanco = { mensal:1, bimestral:2, trimestral:3, semestral:6, anual:12 }[intervalo] || 1;
+        d.setMonth(d.getMonth() + i * mesesAvanco);
+      } else {
+        d.setDate(d.getDate() + i * dias);
+      }
+      datas.push(d.toISOString().slice(0, 10));
+    }
+    return datas;
   },
 
   lerArquivoBase64(file) {
@@ -440,6 +596,7 @@ const App = {
         <td>${this.formatMoney(c.valor)}</td>
         <td><span class="tag tag-${(c.status || '').toLowerCase()}">${c.status}</span>${c.validado ? ' ✅' : ''}</td>
         <td>${c.formaPagamento || '-'}</td>
+        <td>${c.parcela ? `<span title="Parcela ${c.parcela} de ${c.totalParcelas}" style="font-size:11px;color:var(--text-dim);">${c.parcela}/${c.totalParcelas}</span>` : '-'}</td>
         <td class="row-actions">
           <button title="Editar" onclick="App.editarConta(${c.id})">✏️</button>
           <button title="Confirmar pagamento" onclick="App.pagarConta(${c.id})">💲</button>
@@ -449,7 +606,7 @@ const App = {
           <button title="Excluir" onclick="App.excluirConta(${c.id})">🗑️</button>
         </td>
       </tr>
-    `).join('') : '<tr><td colspan="10" class="empty-msg">Nenhuma conta encontrada.</td></tr>';
+    `).join('') : '<tr><td colspan="11" class="empty-msg">Nenhuma conta encontrada.</td></tr>';
   },
 
   editarConta(id) { this.formConta(DB.getById('contas', id)); },
