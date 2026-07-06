@@ -237,7 +237,53 @@ button,input,select{font-family:inherit;font-size:12.5px;}
 }
 
 /* ---------------- PRINT ---------------- */
-@media print{
-  .sidebar,.topbar,.view-header .quick-filters,.filters-bar,.btn-primary{display:none !important;}
-  .view{display:block !important;height:auto;overflow:visible;}
+@media print {
+  /* ocultar toda a estrutura de navegação e controles */
+  .sidebar,
+  .topbar,
+  .filters-bar,
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger,
+  .view-header button,
+  .row-actions,
+  #modalOverlay,
+  #toast,
+  .loginOverlay { display: none !important; }
+
+  /* remover layout flex do app para evitar overflow */
+  html, body { height: auto !important; overflow: visible !important; }
+  .app { display: block !important; }
+  .main { display: block !important; overflow: visible !important; height: auto !important; }
+
+  /* ocultar TODAS as views por padrão */
+  .view { display: none !important; height: auto; overflow: visible; }
+
+  /* mostrar APENAS a view com classe .active */
+  .view.active { display: block !important; }
+
+  /* no relatório: garantir que a tabela de resultado apareça */
+  #relatorioResultado { display: block !important; }
+
+  /* cabeçalho de impressão com título da view ativa */
+  .view-header { display: flex !important; margin-bottom: 12px; }
+  .view-header h1 { font-size: 16px; }
+
+  /* tabelas adaptadas para impressão */
+  .dense-table { font-size: 11px; width: 100%; border-collapse: collapse; }
+  .dense-table th,
+  .dense-table td { border: 1px solid #ccc !important; padding: 4px 6px !important; }
+  .dense-table thead { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* tags de status em preto e branco se a impressora não suportar cores */
+  .tag { border: 1px solid #666; color: #000 !important; background: none !important;
+         padding: 1px 5px; border-radius: 3px; font-size: 10px; }
+
+  /* cards do dashboard se for imprimir o dashboard */
+  .cards-grid { grid-template-columns: repeat(3, 1fr) !important; }
+  .charts-grid { display: none !important; } /* gráficos não imprimem bem */
+
+  /* garantir que o conteúdo não seja cortado entre páginas */
+  .table-box { page-break-inside: avoid; }
+  tr { page-break-inside: avoid; }
 }

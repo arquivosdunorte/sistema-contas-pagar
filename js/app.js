@@ -561,7 +561,18 @@ const App = {
     } catch (e) {
       document.getElementById('modalBody').innerHTML = '<p class="empty-msg">Não foi possível gerar o código de barras com o valor informado.</p>';
     }
-    document.getElementById('btnImprimirBarcode')?.addEventListener('click', () => window.print());
+    document.getElementById('btnImprimirBarcode')?.addEventListener('click', () => {
+      // abre janela separada só com o SVG do código de barras para imprimir
+      const svgEl = document.getElementById('svgBarcode');
+      const svgHtml = svgEl ? svgEl.outerHTML : '';
+      const w = window.open('', '_blank', 'width=500,height=300');
+      w.document.write(`<!DOCTYPE html><html><head><title>Código de Barras</title>
+        <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;}
+        p{font-size:12px;color:#555;margin-top:8px;}</style></head>
+        <body>${svgHtml}<p>${document.querySelector('#modalBody p')?.textContent || ''}</p>
+        <script>window.onload=()=>window.print();<\/script></body></html>`);
+      w.document.close();
+    });
   },
 
   renderContas() {
@@ -884,7 +895,21 @@ const App = {
       if (!dados) { this.toast('Gere o relatório primeiro.'); return; }
       Relatorios.exportarCSV(tipo, dados);
     });
-    document.getElementById('btnExportPDF').addEventListener('click', () => window.print());
+    document.getElementById('btnExportPDF').addEventListener('click', () => {
+      // garante que o relatório foi gerado antes de imprimir
+      if (!this._ultimoRelatorio?.dados?.length) {
+        this.gerarRelatorio();
+      }
+      if (!this._ultimoRelatorio?.dados?.length) {
+        this.toast('Gere o relatório antes de imprimir.');
+        return;
+      }
+      // garante que a view de relatórios é a ativa na impressão
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('view-relatorios').classList.add('active');
+      // pequeno delay para o DOM renderizar antes de abrir o diálogo de impressão
+      setTimeout(() => window.print(), 120);
+    });
   },
 
   gerarRelatorio() {
